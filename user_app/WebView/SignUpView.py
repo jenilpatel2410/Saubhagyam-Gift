@@ -59,7 +59,7 @@ class WebSignUpView(APIView):
                         from_email = settings.EMAIL_HOST_USER
                         to_email = [user.email]
                         subject = "Welcome to Saubhagyam!"
-                        html_content = render_to_string('welcome_register_mail.html',{'user_name':f'{user.first_name} {user.last_name}','shopping':'https://smilegiftshop.in/'})
+                        html_content = render_to_string('welcome_register_mail.html',{'user_name':f'{user.first_name} {user.last_name}','shopping':'https://olivedrab-caribou-708347.hostingersite.com/'})
             
                         # Send email
                         email = EmailMultiAlternatives(subject, html_content, from_email, to_email)
