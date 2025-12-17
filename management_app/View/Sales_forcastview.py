@@ -151,7 +151,7 @@ class SalesForecastAPIView(ListAPIView):
                 product_forecast_sales.items(),
                 key=lambda x: x[1],
                 reverse=True
-            )[:10]
+            )
 
             top_10_names = {p[0] for p in top_10_products}
             results = [r for r in results if r["product_name"] in top_10_names]
