@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Barcode Stickers</title>
+
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  page-break-before: avoid;
+  page-break-after: avoid;
+  page-break-inside: avoid;
+}
+
+html, body {
+  width: 100%;
+  background: #fff;
+  height: auto;
+}
+
+/* IMPORTANT: remove @page size so Chrome does NOT split pages */
+@page {
+  margin: 0;
+  size: auto;
+}
+
+/* One label block (all printed in ONE PAGE) */
+.barcode-page {
+  width: 55mm;
+  height: 15mm;
+
+  display: flex;
+  justify-content: center;   /* center horizontally */
+  align-items: center;        /* center vertically */
+
+  margin: 0;                  /* no gap */
+  padding: 0;                 /* no padding */
+  page-break-inside: avoid;  /* important */
+  break-inside: avoid;
+
+  margin-top: 2mm !important;
+}
+
+/* Barcode image */
+.barcode-page img {
+  max-width: 38mm;
+  max-height: 15mm;
+  object-fit: contain;
+  display: block;
+}
+</style>
+</head>
+
+<body>
+
+{% for product in products %}
+<div class="barcode-page">
+  <img src="{{ product.barcode_image }}" alt="barcode">
+</div>
+{% endfor %}
+
+</body>
+</html>

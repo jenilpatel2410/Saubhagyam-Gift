@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order - {{order.id}}</title>
+        <style>
+        body { font-family: Arial, sans-serif; font-size: 14px; }
+        .invoice-box { max-width: 890px; margin: auto; padding: 10px; border: 1px solid #000; }
+
+        .table th, .table td {
+            border: 1px solid #000;
+            padding: 2px !important;
+            margin: 0 !important;
+            line-height: 12px;   /* Tight text like sample image */
+            height: auto !important;
+        }
+    
+        table {
+            border-collapse: collapse !important;
+        }
+    
+        tr, td {
+            padding: 2px !important;
+            margin: 0 !important;
+            height: auto !important;
+        }
+        </style>
+    </head>
+    <body>
+        <div class="invoice-box">
+
+        <table border="0">
+            <tr>
+            <td style="width:120px; padding-right:10px; border=0;">
+                {% if logo_path %}
+                    <img src="{{ logo_path }}" style="width:90px;">
+                {% else %}
+                    <img src="" style="width:90px;">
+                {% endif %}
+            </td>
+            <td style="text-align:center; border=0; padding-left:15px; padding-bottom:0px; font-size:20px; font-weight:bold;">
+                ORDER / ESTIMATE MEMO
+            </td>
+        </tr>
+    </table>
+
+        <table width="100%" style="border-bottom:1px solid #000; border-collapse: collapse; margin-top: 0;">
+            <tr>
+                <td style="width:60%; vertical-align:top; padding:4px; border-right:1px solid #000;">
+                    <b>Buyer:</b> {{ order.customer }}<br>
+                    <b>Contact:</b> {{ order.phone_no }}<br>    
+                </td>
+
+                <td style="width:40%; vertical-align:top; padding:4px;">
+                    <b>Order No.:</b> {{ order.id }}<br>
+                    <b>Date:</b> {{ order.order_date }}<br>
+                    <b>Shipping Address:</b><br>
+                    {% if order.shipping_address %}
+                        {{ order.shipping_address }}
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+        <table cellspacing="0" class="table" style="width: 100%; border-collapse: collapse;">
+            <tr class="heading">
+                <td style="width: 5%; vertical-align:middle;">S.No.</td>
+                <td style="width: 52%; vertical-align:center;">Description of Goods</td>
+                <td style="width: 10%; vertical-align:center;">Qty.</td>
+                <td style="width: 10%; vertical-align:center;">Price</td>
+                <td style="width: 8%; vertical-align:center;">Disc%</td>
+                <td style="width: 15%; vertical-align:center;">Total Amt.</td>
+            </tr>
+
+            {% for product in products %}
+            <tr class="item" style="vertical-align:center;">
+                <td>{{ forloop.counter }}</td>
+                <td>{{ product.product }}</td>
+
+                <td>{{ product.quantity|floatformat:0 }}</td>
+                <td>{{ product.price|floatformat:2 }}</td>
+                <td>{{ product.discount|floatformat:0 }}</td>
+                <td>{{ product.sub_total|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+
+            <tr>
+                <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+                <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+
+            <tr>
+                <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+                <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+
+            <tr style="height:60px !important;">
+                <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+                <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+
+        </table>
+        <table class="table" style="width:100%; border-collapse: collapse;">
+            <tr style=" font-size:12px;">
+                <td style="text-align:right; width:60%;"><b>Total Qty:</b></td>
+                <td style="width:40%;">{{ total_quantity|floatformat:0 }}</td>
+            </tr>
+            <tr>
+                <td style="width:60%; vertical-align: top; border:1px solid #000; padding:8px;">
+                    <b>In Words:</b><br>
+                    {{ order.final_total_words }}
+                </td>
+                <td style="width:40%; border:1px solid #000; padding:0px;">
+                    <table style="width:100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="border:1px solid #000;">Sub Total</td>
+                            <td style="border:1px solid #000; text-align:right;">
+                                {{ order.product_total|floatformat:2 }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000;">Discount</td>
+                            <td style="border:1px solid #000; text-align:right;">
+                                {{ order.discount_amount|floatformat:2 }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000;">Advance Amt</td>
+                            <td style="border:1px solid #000; text-align:right;">
+                                {{ order.advance_amount|floatformat:2 }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000;"><b>Grand Total</b></td>
+                            <td style="border:1px solid #000; text-align:right;">
+                                <b>{{ order.final_total|floatformat:2 }}</b>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+
+</html>
