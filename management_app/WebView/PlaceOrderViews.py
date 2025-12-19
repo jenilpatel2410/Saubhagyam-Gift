@@ -86,6 +86,7 @@ class PlaceOrderAPI(APIView):
                     for item in cart_items
                 ],
                 "sale_status" : "Sales Order",
+                "balance_amount": float(total),
             }
 
             serializer = PlaceOrderSerializer(data=serializer_data, context={'request': request, 'lang' : lang})

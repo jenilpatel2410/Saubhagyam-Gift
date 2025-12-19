@@ -34,28 +34,29 @@ class WebHomeProductView(APIView):
                 adv['bg_image'] = f'/media/Categories/bg{i}.jpg'
             data['advertisemnt'] = adv_serialized
             
-            categories_qs = CategoryModel.objects.all()
-            parent_name_set = set()
+            parents_qs = CategoryModel.objects.filter(
+                depth=1,
+                is_active=True
+            ).order_by('id')
+
             category_list = []
 
-            for category in categories_qs:
-                parent = category.get_parent()
-                
-                if parent and parent.name not in parent_name_set:
-                    parent_name_set.add(parent.name)
-                    category_translation = CategoryTranslation.objects.filter(
-                        category=parent,
-                        language_code=lang
-                    ).first()
-                    translated_cat_name = category_translation.name if category_translation else parent.name
-                    
-                    category_list.append({
-                        'id': category.id,
-                        "encrypted_id" : parent.encrypted_id,
-                        'name': translated_cat_name,
-                        'image': request.build_absolute_uri(parent.image.url) if parent.image else 'image not found',
-                        'slug': parent.name.lower().replace(' ', '-')
-                    })
+            for parent in parents_qs:
+                category_translation = CategoryTranslation.objects.filter(
+                    category=parent,
+                    language_code=lang
+                ).first()
+
+                translated_cat_name = category_translation.name if category_translation else parent.name
+
+                category_list.append({
+                    'id': parent.id,
+                    'encrypted_id': parent.encrypted_id,
+                    'name': translated_cat_name,
+                    'image': request.build_absolute_uri(parent.image.url) if parent.image else None,
+                    'slug': parent.name.lower().replace(' ', '-'),
+                    'has_children': parent.get_children().exists()
+                })
                 
                 title_translation = {
                 'en': 'Popular Categories',

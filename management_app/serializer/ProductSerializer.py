@@ -101,21 +101,46 @@ class ProductSerializer(serializers.ModelSerializer):
         - ["1", "2"] -> [1, 2]
         - [1, 2] -> [1, 2]
         - "[1,2]" -> [1, 2]
+        - "1,2,3" -> [1, 2, 3]
+        - ["1,2,3"] -> [1, 2, 3]
         """
         if value is None:
             return []
+
+        # Case: already an int
+        if isinstance(value, int):
+            return [value]
+
+        # Case: string input
         if isinstance(value, str):
+            value = value.strip()
+
+            # Try JSON first (handles "[1,2]" or "1")
             try:
-                parsed = json.loads(value) 
+                parsed = json.loads(value)
                 if isinstance(parsed, list):
                     return [int(v) for v in parsed]
                 return [int(parsed)]
             except Exception:
-                return [int(value)]  
-        if isinstance(value, int):
-            return [value]
+                pass
+
+            # Handle comma-separated string: "1,2,3"
+            if "," in value:
+                return [int(v.strip()) for v in value.split(",") if v.strip()]
+
+            # Fallback: single number string
+            return [int(value)]
+
+        # Case: list input
         if isinstance(value, list):
-            return [int(v) for v in value]
+            ids = []
+            for v in value:
+                if isinstance(v, str) and "," in v:
+                    ids.extend(int(x.strip()) for x in v.split(",") if x.strip())
+                else:
+                    ids.append(int(v))
+            return ids
+
         return []
 
     def create(self, validated_data):

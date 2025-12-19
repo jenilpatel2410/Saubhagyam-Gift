@@ -193,6 +193,7 @@ class UserSerializer(serializers.ModelSerializer):
 class UserListSerializer(serializers.ModelSerializer):
     many_address = serializers.SerializerMethodField()
     role = serializers.CharField(source='user.role.type', default="")
+    role_id = serializers.IntegerField(source='user.role.id', read_only=True)
     firm_name = serializers.CharField(source='user.firm_name', default="")
     first_name = serializers.CharField(source='user.first_name',default='')
     last_name = serializers.CharField(source='user.last_name',default='')
@@ -211,7 +212,7 @@ class UserListSerializer(serializers.ModelSerializer):
  
     class Meta:
         model = ContactModel
-        fields = ['id', 'name','first_name','last_name','email','role','phone_no','many_address','firm_name','transport']
+        fields = ['id', 'name','first_name','last_name','email','role','role_id','phone_no','many_address','firm_name','transport']
 
 
 class MobileUserSerializer(serializers.ModelSerializer):

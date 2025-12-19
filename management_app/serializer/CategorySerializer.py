@@ -63,6 +63,7 @@ class SubCategorySerializer(serializers.ModelSerializer):
         except CategoryModel.DoesNotExist:
             raise serializers.ValidationError({"parent_id": "Parent category not found."})
         
+        validated_data.pop('remove_image',None)
         return parent.add_child(**validated_data)
 
     def update(self, instance, validated_data):

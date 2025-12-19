@@ -106,6 +106,7 @@ class OnlinePlaceOrderAPI(APIView):
                         for item in cart_items
                     ],
                     "sale_status" : "Sales Order",
+                    "paid_amount": float(final_total),
                 }
                 
                 serializer = PlaceOrderSerializer(data=serializer_data, context={'request': request})
