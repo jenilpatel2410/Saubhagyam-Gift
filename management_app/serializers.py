@@ -6,6 +6,13 @@ import slugify,json
 
 
 class RoleSerilaizer(serializers.ModelSerializer):
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+
+        validated_data['admin_user'] = request.user
+
+        return super().create(validated_data)
 
     class Meta:
         model = RoleModel

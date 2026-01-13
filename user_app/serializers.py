@@ -63,6 +63,7 @@ class UserSerializer(serializers.ModelSerializer):
     address_details = serializers.SerializerMethodField(read_only=True)
     password = serializers.CharField(write_only=True, required=False)
     transport = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField()
 
     def get_address_details(self,obj):
         if obj.address.exists():
@@ -77,68 +78,70 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Mobile number is required.")
         user_id = self.instance.id if self.instance else None
 
-        # Check if another user already has this mobile number
-        if UserModel.objects.filter(mobile_no=value).exclude(id=user_id).exists():
-            raise serializers.ValidationError("Mobile number already exists.")
+        # # Check if another user already has this mobile number
+        # if UserModel.objects.filter(mobile_no=value).exclude(id=user_id).exists():
+        #     raise serializers.ValidationError("Mobile number already exists.")
         return value
-        
+
+
     def create(self, validated_data):
         address_data = validated_data.pop("address", None)
-        password = validated_data.get("password", None)
+        password = validated_data.pop("password", None)
         transport = validated_data.pop("transport", None)
-        
+        admin_user = self.context.get("admin_user")
 
-        try:
-            with transaction.atomic():
-                # Create user instance
-                if 'firm_name' not in validated_data or not validated_data['firm_name']:
-                    validated_data['firm_name'] = f"{validated_data.get('first_name','')} {validated_data.get('last_name','')}".strip()
-                instance = super().create(validated_data)
-                if password:
-                    instance.set_password(password)
-                    instance.save()
-                # Create address if any
-                if address_data:
-                    for addr in address_data:
-                        address = AddressModel.objects.create(
-                            **addr,
-                            full_name=f"{instance.first_name} {instance.last_name}",
-                            mobile=instance.mobile_no
-                        )
-                        instance.address.add(address)
+        email = validated_data.get("email")
 
-                # Create contact (if this fails -> rollback everything)
-                contact = ContactModel.objects.create(
-                    user=instance,
-                    name=f"{instance.first_name} {instance.last_name}",
-                    phone_no=instance.mobile_no,
-                    email=instance.email,
-                    transport=transport,
-                )
+        with transaction.atomic():
+            #  Reuse user if email already exists
+            user, created = UserModel.objects.get_or_create(
+                email=email,
+                defaults=validated_data
+            )
 
-                if instance.address.exists():
-                    contact.many_address.set(instance.address.all())
+            #  Set password only if user is newly created
+            if created and password:
+                user.set_password(password)
+                user.save()
 
-                # Create profile
-                profile = ProfileModel.objects.create(
-                    user=instance,
-                    mobile_no=instance.mobile_no,
-                )
+            #   Address handling (only when user is created)
+            if created and address_data:
+                for addr in address_data:
+                    address = AddressModel.objects.create(
+                        **addr,
+                        full_name=f"{user.first_name} {user.last_name}",
+                        mobile=user.mobile_no
+                    )
+                    user.address.add(address)
 
-                if instance.address.exists():
-                    profile.addresses.set(instance.address.all())
+            #  Create contact for this admin (tenant)
+            ContactModel.objects.get_or_create(
+                user=user,
+                admin_user=admin_user,
+                defaults={
+                    "name": f"{user.first_name} {user.last_name}",
+                    "phone_no": user.mobile_no,
+                    "email": user.email,
+                    "transport": transport,
+                }
+            )
 
-                return instance
+            #  Profile is global, create once
+            ProfileModel.objects.get_or_create(
+                user=user,
+                defaults={"mobile_no": user.mobile_no}
+            )
 
-        except IntegrityError as e:
-            # You can raise a DRF ValidationError instead if this is in a serializer
-            raise IntegrityError(f"User creation failed due to contact error: {str(e)}")
+            return user
     
     
     def update(self, instance, validated_data):
         address_data = validated_data.pop('address',None)
         password = validated_data.get("password", None)
         transport = validated_data.pop("transport", None)
+        
+        admin_user = self.context.get("admin_user")  
+
 
         instance = super().update(instance,validated_data)
         if password:
@@ -164,7 +167,9 @@ class UserSerializer(serializers.ModelSerializer):
                     instance.address.add(address)    
                 
 
-        contact, _ = ContactModel.objects.get_or_create(user=instance)
+        contact, _ = ContactModel.objects.get_or_create(user=instance,admin_user=admin_user)
+        # contact.admin_user = admin_user       
+
         contact.name = f"{instance.first_name} {instance.last_name}"
         contact.phone_no = instance.mobile_no
         contact.email = instance.email
@@ -190,29 +195,126 @@ class UserSerializer(serializers.ModelSerializer):
         model = UserModel
         fields = ['id','first_name','last_name','password','email','mobile_no','role','address','address_details','firm_name','transport']
 
-class UserListSerializer(serializers.ModelSerializer):
-    many_address = serializers.SerializerMethodField()
-    role = serializers.CharField(source='user.role.type', default="")
-    role_id = serializers.IntegerField(source='user.role.id', read_only=True)
-    firm_name = serializers.CharField(source='user.firm_name', default="")
-    first_name = serializers.CharField(source='user.first_name',default='')
-    last_name = serializers.CharField(source='user.last_name',default='')
 
-    def get_many_address(self,obj):
-        if obj.user:
-            addresses = obj.user.address.all()     
-            return AddressSerializerForCreate(addresses, many=True).data
-        return []
-        # if obj.many_address.exists():
-        #     address = []
-        #     for addr in obj.many_address.all():
-        #         address.append(AddressSerializerForCreate(addr).data)
-        #     return address
-        # return []          
- 
+class ContactUpdateSerializer(serializers.ModelSerializer):
+    address = serializers.ListField(required=False)
+    
+    def update(self, instance, validated_data):
+        address_data = validated_data.pop('address', None)
+        role_id = self.initial_data.get('role')
+
+        # ---------- SAFE FIELD MAPPING ----------
+        # frontend -> ContactModel
+        if 'first_name' in self.initial_data or 'last_name' in self.initial_data:
+            first = self.initial_data.get('first_name', '').strip()
+            last = self.initial_data.get('last_name', '').strip()
+            instance.name = f"{first} {last}".strip()
+
+        if 'mobile_no' in self.initial_data:
+            instance.phone_no = self.initial_data.get('mobile_no')
+
+        if 'email' in validated_data:
+            instance.email = validated_data.get('email')
+
+        if 'transport' in validated_data:
+            instance.transport = validated_data.get('transport')
+
+        instance.save()
+        
+        if role_id:
+            try:
+                instance.user.role_id = role_id
+                instance.user.save(update_fields=['role'])
+            except Exception:
+                raise serializers.ValidationError(
+                    {"role": "Invalid role"}
+                )
+
+        # ---------- ADDRESS HANDLING ----------
+        if not address_data:
+            return instance
+
+        for addr in address_data:
+            addr_id = addr.get('id')
+
+            if addr_id:
+                try:
+                    address = instance.many_address.get(id=addr_id)
+                    for key, value in addr.items():
+                        if key != 'id':
+                            setattr(address, key, value)
+                    address.save()
+                except AddressModel.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {"address": f"Address with id {addr_id} not found"}
+                    )
+            else:
+                address = AddressModel.objects.create(**addr)
+                instance.many_address.add(address)
+
+        return instance
+
+
+
     class Meta:
         model = ContactModel
-        fields = ['id', 'name','first_name','last_name','email','role','role_id','phone_no','many_address','firm_name','transport']
+        fields = [
+            'name',
+            'phone_no',
+            'email',
+            'transport',
+            'address',   # list of address dicts (same as UserSerializer)
+        ]
+
+
+class UserListSerializer(serializers.ModelSerializer):
+    many_address = serializers.SerializerMethodField()
+
+    # 👇 show from Contact first, fallback to User
+    first_name = serializers.SerializerMethodField()
+    last_name = serializers.SerializerMethodField()
+    firm_name = serializers.SerializerMethodField()
+
+    role = serializers.CharField(source='user.role.type', default="")
+    role_id = serializers.IntegerField(source='user.role.id', read_only=True)
+
+    def get_first_name(self, obj):
+        if obj.name:
+            return obj.name.split(' ')[0]
+        return obj.user.first_name if obj.user else ""
+
+    def get_last_name(self, obj):
+        if obj.name and len(obj.name.split(' ')) > 1:
+            return " ".join(obj.name.split(' ')[1:])
+        return obj.user.last_name if obj.user else ""
+
+    def get_firm_name(self, obj):
+        # firm_name is business-specific → keep it on Contact
+        return obj.name or (obj.user.firm_name if obj.user else "")
+
+    def get_many_address(self, obj):
+        if obj.many_address.exists():
+            return AddressSerializerForCreate(
+                obj.many_address.all(),
+                many=True
+            ).data
+        return []
+
+    class Meta:
+        model = ContactModel
+        fields = [
+            'id',
+            'name',
+            'first_name',
+            'last_name',
+            'email',
+            'role',
+            'role_id',
+            'phone_no',
+            'many_address',
+            'firm_name',
+            'transport',
+        ]
 
 
 class MobileUserSerializer(serializers.ModelSerializer):

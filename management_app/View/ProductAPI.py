@@ -20,19 +20,22 @@ from django.template.loader import get_template
 from xhtml2pdf import pisa
 import ast  
 from urllib.parse import urljoin
-
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
 class ProductAPI(APIView):
+    
+    permission_classes = [IsAuthenticated]
     def get(self,request,id=None):
+        user = request.user
         search = request.query_params.get('search','').strip()
         cat_id = request.query_params.get('cat_id','')
         company_id = request.query_params.get('company_id','')
         home_category = request.query_params.get('home_category','')
         all_flag = request.query_params.get("all", "false").lower() == "true" 
-        products = ProductModel.objects.filter(is_active=True).order_by('-id')
+        products = ProductModel.objects.filter(is_active=True,admin_user=user).order_by('-id')
 
         if id:
-            product = products.get(id=id)
+            product = products.get(id=id, admin_user=request.user)
             serializer = ProductDetailSerializer(product)
             return Response({'status':True,'data':serializer.data,'message':'Product details retrieved successfully'})
         
@@ -108,7 +111,7 @@ class ProductAPI(APIView):
     
     def patch(self,request,id):
         try:
-            product = ProductModel.objects.get(id=id)
+            product = ProductModel.objects.get(id=id,admin_user=request.user)
             data = request.data.copy()
             if 'company' not in data:
                 data['company'] = None
@@ -123,7 +126,7 @@ class ProductAPI(APIView):
     
     def delete(self,request,id):
         try:
-            product = ProductModel.objects.get(id=id)
+            product = ProductModel.objects.get(id=id,admin_user=request.user)
             product.delete()
             return Response({'status':True,'message':'Product Deleted Successfully'},status=status.HTTP_200_OK)
 
@@ -134,6 +137,7 @@ class ProductAPI(APIView):
 
 
 class ProductExcelImportAPI(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         serializer = ProductImportSerializer(data=request.data)
         if serializer.is_valid():
@@ -272,7 +276,7 @@ class ProductExcelImportAPI(APIView):
     
 
 class ProductExportView(APIView):
-
+    permission_classes = [IsAuthenticated]
     def get(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return Response(
@@ -297,7 +301,7 @@ class ProductExportView(APIView):
         ]
 
 
-        qs = ProductModel.objects.all().select_related('brand').prefetch_related('category', 'sub_category')
+        qs = ProductModel.objects.filter(admin_user=request.user).select_related('brand').prefetch_related('category', 'sub_category')
 
   
         wb = openpyxl.Workbook()
@@ -347,14 +351,15 @@ class ProductExportView(APIView):
         }, status=200)
  
 class BarcodeDownloadPdfView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         barcode_count = request.query_params.get('barcode_count', 1)
         try:
             barcode_count = int(barcode_count)
         except ValueError:
             barcode_count = 1
-        
-        products = ProductModel.objects.all().order_by('-id')
+
+        products = ProductModel.objects.filter(admin_user=request.user).order_by('-id')
 
         product_ids = request.query_params.get('product_ids')
 
@@ -430,6 +435,7 @@ class BarcodeDownloadPdfView(APIView):
 
     
 class BarcodeDownloadExcelView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
@@ -450,7 +456,7 @@ class BarcodeDownloadExcelView(APIView):
 
 
         # Data rows
-        for product in ProductModel.objects.all().order_by("id"):
+        for product in ProductModel.objects.filter(admin_user=request.user).order_by("id"):
             sheet.append([product.item_code, product.name, ""])  # placeholder for image
 
             sheet.row_dimensions[row_num].height = 35

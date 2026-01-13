@@ -52,7 +52,7 @@ class AccountManager(BaseUserManager):
 class RoleModel(models.Model):
     name = models.CharField(max_length=150)
     type = models.CharField(choices=[('Admin','Admin'),('Retailer','Retailer'),('Wholesaler','Wholesaler'),('Distributer','Distributer'),('Employee','Employee')],max_length=100,null=True,blank=True)
-
+    admin_user = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,null=True,blank=True,related_name='admin_roles')
     def __str__(self):
         return self.type
     
@@ -165,11 +165,14 @@ class UserModel(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = 'user'
         verbose_name_plural = 'users'
+        indexes = [
+            models.Index(fields=['email'], name='idx_user_email'),
+        ]
 
 class ProfileModel(models.Model):
     user = models.OneToOneField(UserModel, on_delete=models.CASCADE)
     profile_pic = models.ImageField(upload_to='Profile', blank=True, null=True)
-    mobile_no = PhoneNumberField(unique=True, blank=True, null=True)
+    mobile_no = PhoneNumberField(blank=True, null=True)
     addresses = models.ManyToManyField(AddressModel, blank=True)
     otp = models.IntegerField(blank=True, null=True)
     otp_requested_at = models.DateTimeField(blank=True, null=True)

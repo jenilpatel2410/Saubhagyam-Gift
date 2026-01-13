@@ -82,6 +82,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
+        'user_app.backends.EmailAdminBackend',
     ),
 }
 
@@ -148,9 +149,9 @@ PHONENUMBER_DEFAULT_REGION = None
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'saubhagyam_gift',
-        'USER': 'saubhagyam_gift',
-        'PASSWORD': 'strongpassword',
+        'NAME': 'saubhagyamgift',
+        'USER': 'postgres',
+        'PASSWORD': '1',
         'HOST': 'localhost',   # same VPS
         'PORT': '5432',
     }

@@ -9,9 +9,13 @@ class InventorySerializer(serializers.ModelSerializer):
     last_updated = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S",read_only=True)
 
     def create(self,validated_data):
+        request = self.context.get('request')
+        validated_data['admin_user'] = request.user
+        
         product = validated_data.get('product')
         quantity = validated_data.get('quantity',0)
-
+        
+        
         inventory = Inventory.objects.filter(product=product)
         if inventory.exists():
             inventory = inventory.first()

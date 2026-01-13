@@ -17,10 +17,10 @@ class  DashboardView(APIView):
 
     def get(self,request):
         data = {
-            "total_products" :ProductModel.objects.filter(is_active=True).count(),
-            "total_orders": OrderModel.objects.count(), # exclude(order_status='delivered')
-            "total_users":ContactModel.objects.filter(is_active=True,user__role__type__in = ['Wholesaler','Retailer']).count(),
-            'total_categories':CategoryModel.objects.filter(is_active=True).count()
+            "total_products" :ProductModel.objects.filter(is_active=True,admin_user=request.user).count(),
+            "total_orders": OrderModel.objects.filter(admin_user=request.user).count(), # exclude(order_status='delivered')
+            "total_users":ContactModel.objects.filter(is_active=True,admin_user=request.user,user__role__type__in = ['Wholesaler','Retailer']).count(),
+            'total_categories':CategoryModel.objects.filter(is_active=True,admin_user=request.user).count()
             # "Retailer Orders" : OrderModel.objects.filter(customer__role__type='Retailer').count()
         }
 

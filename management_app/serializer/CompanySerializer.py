@@ -15,8 +15,12 @@ class CompanySerializer(serializers.ModelSerializer):
         return {}
 
     def create(self, validated_data):
+        request = self.context.get('request')  
+
         address_data = validated_data.pop('address','')
+        validated_data['admin_user'] = request.user
         instance  = super().create(validated_data)
+
 
         if address_data:
             address = AddressModel.objects.create(**address_data,full_name=instance.name,mobile=instance.phone_no)
@@ -27,26 +31,51 @@ class CompanySerializer(serializers.ModelSerializer):
 
         return instance
    
-    def update(self,instance,validated_data):
-        address_data = validated_data.pop('address','')
+    # def update(self,instance,validated_data):
+    #     address_data = validated_data.pop('address','')
         
-        super().update(instance,validated_data)
+    #     super().update(instance,validated_data)
 
-        if address_data:
-            if instance.address:
-               address = instance.address
-               for field, value in address_data.items():
-                  setattr(address, field, value)
-               address.save()
-            address = AddressModel.objects.create(**address_data,full_name=instance.name,mobile=instance.phone_no)
-            instance.address = address 
-            instance.save() 
+    #     if address_data:
+    #         if instance.address:
+    #            address = instance.address
+    #            for field, value in address_data.items():
+    #               setattr(address, field, value)
+    #            address.save()
+    #         address = AddressModel.objects.create(**address_data,full_name=instance.name,mobile=instance.phone_no)
+    #         instance.address = address 
+    #         instance.save() 
 
-        return instance
+    #     return instance
             
     class Meta:
         model = CompanyModel
         fields = ['id','name','logo','code','email','phone_no','gstin','pan_number','address','is_active','address_details']
+
+    def update(self, instance, validated_data):
+        address_data = validated_data.pop('address', None)
+
+        instance = super().update(instance, validated_data)
+
+        if address_data:
+            if instance.address:
+                address = instance.address
+                for field, value in address_data.items():
+                    setattr(address, field, value)
+                address.full_name = instance.name
+                address.mobile = instance.phone_no
+                address.save()
+            else:
+                address = AddressModel.objects.create(
+                    **address_data,
+                    full_name=instance.name,
+                    mobile=instance.phone_no
+                )
+                instance.address = address
+                instance.save()
+
+        return instance
+
 
 class CompanyListSerializer(serializers.ModelSerializer):
     address = AddressSerializerForCreate(read_only=True)

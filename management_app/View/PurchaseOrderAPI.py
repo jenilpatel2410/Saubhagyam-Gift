@@ -14,14 +14,15 @@ import pandas as pd
 from openpyxl.styles import Font
 from django.http import HttpResponse
 from django.utils.timezone import localtime
-
+from rest_framework.permissions import IsAuthenticated
 
 class PurchaseOrderView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self,request,id=None):
-        purchase_orders = PurchaseOrder.objects.all().order_by('-id')
+        purchase_orders = PurchaseOrder.objects.filter(admin_user=request.user).order_by('-id')
         search = request.query_params.get('search','')
         if id:
-            purchase_orders = PurchaseOrder.objects.get(id=id)
+            purchase_orders = PurchaseOrder.objects.get(id=id,admin_user=request.user)
             serializer = PurchaseOrderListSerializer(purchase_orders)
             return Response({'status':True,'data':serializer.data})
             
@@ -39,7 +40,7 @@ class PurchaseOrderView(APIView):
     
     def post(self,request):
         purchase_items = request.data.get('purchase_items','')
-        serializer = PurchaseOrderSerializer(data=request.data)
+        serializer = PurchaseOrderSerializer(data=request.data,context={"request": request})
         if serializer.is_valid():
             purchase_order=serializer.save()
             if purchase_items:
@@ -57,7 +58,7 @@ class PurchaseOrderView(APIView):
     
     def patch(self,request,id):
         try:
-          purchase_order = PurchaseOrder.objects.get(id=id)
+          purchase_order = PurchaseOrder.objects.get(id=id,admin_user=request.user)
           purchase_items = request.data.get('purchase_items','')
           serializer = PurchaseOrderSerializer(purchase_order,data=request.data,partial=True, context={"request": request})
           if serializer.is_valid():
@@ -89,7 +90,7 @@ class PurchaseOrderView(APIView):
     
     def delete(self,request,id):
         try:
-          purchase_order = PurchaseOrder.objects.get(id=id)
+          purchase_order = PurchaseOrder.objects.get(id=id,admin_user=request.user)
           purchase_order.delete()
           return Response({'status':True,'message':'Purchase Order is deleted successfully'},status=status.HTTP_200_OK)
         except PurchaseOrder.DoesNotExist:
@@ -97,7 +98,7 @@ class PurchaseOrderView(APIView):
         
 
 class PurchaseOrderItemView(APIView):
-
+    permission_classes = [IsAuthenticated]
     def get(self,request,id):
         if id:
             purchased_order_items = PurchaseOrderItem.objects.filter(purchase_order__id=id).order_by('-id')
@@ -107,7 +108,7 @@ class PurchaseOrderItemView(APIView):
          
     def patch(self,request,id):
         try:
-            purchased_order_items = PurchaseOrderItem.objects.get(id=id)
+            purchased_order_items = PurchaseOrderItem.objects.get(id=id,admin_user=request.user)
             serializer = PurchaseOrderItemSerializer(purchased_order_items,data=request.data,partial=True,context={'request':request})
             if serializer.is_valid():
                 serializer.save()
@@ -125,6 +126,7 @@ class PurchaseOrderItemView(APIView):
           return Response({'status':False,'message':'Purchase Order Item  not available'})
 
 class Export_purchase_orders_excel(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self,request):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
@@ -136,7 +138,7 @@ class Export_purchase_orders_excel(APIView):
         file_name = f'purchase_orders{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
         file_path = os.path.join(export_dir, file_name)
 
-        purchase_orders = PurchaseOrder.objects.all()
+        purchase_orders = PurchaseOrder.objects.filter(admin_user=request.user).order_by('-id')
 
         sheet.append(["ID", "Vendor",'Date & Time','Sub Total','Order Status'])
         for cell in sheet[1]:  # first row
@@ -160,7 +162,7 @@ class Export_purchase_orders_excel(APIView):
     
 
 class ImportPurchaseItemsView(APIView):
-
+    permission_classes = [IsAuthenticated]
     def post(self, request, *args, **kwargs):
         file = request.FILES.get("file")
         if not file:
@@ -188,7 +190,7 @@ class ImportPurchaseItemsView(APIView):
 
             # ✅ Fetch product from DB
             try:
-                product = ProductModel.objects.get(item_code=item_code)
+                product = ProductModel.objects.get(item_code=item_code, admin_user=request.user)
             except ProductModel.DoesNotExist:
                 continue
 

@@ -22,7 +22,10 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
         fields = ['id','vendor','order_date','expected_delivery','order_status','sub_total','discount','discount_price','final_total','purchase_address']
-    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['admin_user'] = request.user
+        return super().create(validated_data)
 
 class PurchaseOrderItemListSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name',default='')

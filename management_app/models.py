@@ -19,7 +19,7 @@ from django.db.models import Max
 from tinymce_4.fields import TinyMCEModelField
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
-
+from user_app.models import UserModel
 # Create your models here.
 
 class CategoryTagsModel(models.Model):
@@ -34,6 +34,8 @@ class CategoryTagsModel(models.Model):
 
 
 class CategoryModel(MP_Node):
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True)
+
     name = models.CharField(max_length=255)
     image = models.ImageField(upload_to="Categories", blank=True, null=True)
     sub_category_image = models.ImageField(upload_to='Sub Categories',blank=True,null=True)
@@ -82,6 +84,7 @@ class CategoryModel(MP_Node):
         ]
         
 class CategoryTranslation(models.Model):
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True,related_name='category_translation_admin')
     category = models.ForeignKey(CategoryModel, on_delete=models.CASCADE, related_name='translations')
     language_code = models.CharField(max_length=10) 
     name = models.CharField(max_length=255)
@@ -97,7 +100,7 @@ class CategoryTranslation(models.Model):
 
 class HomeCategoryModel(models.Model):
     name = models.CharField(max_length=50)
-
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True,related_name='home_category_admin')
     class Meta:
         verbose_name = "Home Category"
         verbose_name_plural = "Home Categories"
@@ -107,6 +110,7 @@ class HomeCategoryModel(models.Model):
         return self.name
     
 class HomeCategoryTranslation(models.Model):
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True,related_name='home_category_translation_admin')
     home_category = models.ForeignKey(HomeCategoryModel, on_delete=models.CASCADE, related_name='translations')
     language_code = models.CharField(max_length=10)
     name = models.CharField(max_length=255)
@@ -137,6 +141,7 @@ class BrandModel(models.Model):
         ]
 
 class CompanyModel(models.Model):
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True)
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=100)
     address = models.ForeignKey('user_app.AddressModel', on_delete=models.SET_NULL , related_name = 'company',blank=True,null=True)
@@ -197,7 +202,7 @@ class ProductModel(models.Model):
         ("bottle", "Bottle"),
         ("jar", "Jar"),
     ]
-
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True)
     category = models.ManyToManyField(CategoryModel, blank=True , related_name='product_single_category')
     sub_category = models.ManyToManyField(CategoryModel, blank=True , related_name='product_sub_category')
     home_categories = models.ManyToManyField(HomeCategoryModel, blank=True, related_name='home_categories')
@@ -582,8 +587,10 @@ class OrderModel(models.Model):
         sales_order = ('Sales Order', 'Sales Order')
         cancel_order = ('Cancelled', 'Cancelled')
     
+    admin_user = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,null=True,blank=True,related_name='admin_orders')
+    
     sales_person = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL, blank=True, null=True, related_name='sales_person')
-    customer = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,blank=True, null=True)
+    customer = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,blank=True, null=True,related_name='customer_orders')
     created_at = models.DateTimeField(default=timezone.now)
     payment_id = models.CharField(max_length=255, blank=True, null=True)
     transaction_id = models.CharField(max_length=255, blank=True, null=True)
@@ -680,6 +687,8 @@ class OrderModel(models.Model):
     
 
 class OrderLinesModel(models.Model):
+    admin_user = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,null=True,blank=True)
+
     order = models.ForeignKey(OrderModel, on_delete=models.CASCADE , blank=True , null=True , related_name='orderrelation')
     product = models.ForeignKey(ProductModel, on_delete=models.SET_NULL , blank=True , null=True)
     quantity = models.FloatField(default=0.00)
@@ -746,6 +755,7 @@ class SerialNumbersModel(models.Model):
 
 
 class Inventory(models.Model):
+    admin_user = models.ForeignKey(UserModel, on_delete=models.SET_NULL,null=True,blank=True,related_name='inventory_admin')
     created_at = models.DateTimeField(default=timezone.now)
     last_updated = models.DateTimeField(auto_now=True)
     location_stock = models.ForeignKey(LocationModel, on_delete=models.CASCADE, blank=True, null=True)
@@ -1100,6 +1110,8 @@ class ContactModel(models.Model):
         customer = ('Customer', 'Customer')
         vendor = ('Vendor', 'Vendor')
         poscustomer = ('pos_customer', 'pos_customer')
+        
+    admin_user = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,null=True,blank=True,related_name='admin_contacts')
 
     created_at = models.DateTimeField(default=timezone.now)
     user = models.ForeignKey(
@@ -1127,6 +1139,8 @@ class ContactModel(models.Model):
         
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        unique_together = ('admin_user', 'user')
 
     def __str__(self):
         return f'{self.name} - {self.contact_role}'
@@ -1155,6 +1169,8 @@ class PurchaseOrder(models.Model):
         purchase_order = ('Purchase Order', 'Purchase Order')
         rfq = ('RFQ', 'RFQ')
         cancel = ('Cancelled', 'Cancelled')
+        
+    admin_user = models.ForeignKey('user_app.UserModel', on_delete=models.SET_NULL,null=True,blank=True,related_name='admin_purchase_orders')
     vendor = models.ForeignKey(ContactModel, on_delete=models.CASCADE, related_name="purchase_orders")
     order_date = models.DateTimeField(auto_now_add=True)
     purchase_address = models.ForeignKey('user_app.AddressModel', on_delete=models.CASCADE, verbose_name="Delivery Address",

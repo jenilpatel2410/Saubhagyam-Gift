@@ -14,11 +14,21 @@ class CategorySerializer(serializers.ModelSerializer):
         if remove_image:
             instance.image.delete(save=False)
             instance.image = None
+            
+        user = self.context['request'].user
+        instance.admin_user = user
+
+
+        
         return super().update(instance, validated_data)
+
 
     def create(self, validated_data):
         validated_data.pop('remove_image')
-        return CategoryModel.add_root(**validated_data)
+        
+        user = self.context['request'].user
+        return CategoryModel.add_root(admin_user=user,
+                                      **validated_data)
 
 class MobileCategorySerializer(serializers.ModelSerializer):
     category_name = serializers.SerializerMethodField()
@@ -55,22 +65,33 @@ class SubCategorySerializer(serializers.ModelSerializer):
             return ''
     
     def create(self, validated_data):
+        request = self.context['request']
+        user = request.user
+
         parent_id = validated_data.pop('parent_id',None)
         if not parent_id:
             raise serializers.ValidationError({"parent_id": "This field is required."})
         try:
-            parent = CategoryModel.objects.get(id=parent_id)
+            parent = CategoryModel.objects.get(id=parent_id,admin_user=user)
         except CategoryModel.DoesNotExist:
             raise serializers.ValidationError({"parent_id": "Parent category not found."})
+        
+        validated_data['admin_user'] = user
+
         
         validated_data.pop('remove_image',None)
         return parent.add_child(**validated_data)
 
     def update(self, instance, validated_data):
+        request = self.context['request']
+        user = request.user
+        
+        instance.admin_user = user
+
         parent_id = validated_data.pop('parent_id',None)       
         if  parent_id is not None: 
             try:
-                parent = CategoryModel.objects.get(id=parent_id)
+                parent = CategoryModel.objects.get(id=parent_id,admin_user=user)
                 if parent == instance or parent.is_descendant_of(instance):
                       raise serializers.ValidationError({'parent_id': 'Cannot move into self or descendant.'})
             except CategoryModel.DoesNotExist:
@@ -103,6 +124,7 @@ class SubCategorySerializer(serializers.ModelSerializer):
 
 
 from rest_framework import serializers
+
 from management_app.models import CategoryModel, CategoryTranslation, BusinessCategoryModel
 
 class MobileSubCategorySerializer(serializers.ModelSerializer):

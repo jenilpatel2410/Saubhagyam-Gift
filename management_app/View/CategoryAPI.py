@@ -12,11 +12,16 @@ import openpyxl
 from openpyxl.styles import Font
 from django.http import HttpResponse
 from ..pagination import ListPagination
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
 
 class CategoryAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self,request):
-        categories = CategoryModel.objects.filter(is_active=True).order_by('-id')
+        user = request.user
+
+        categories = CategoryModel.objects.filter(is_active=True,admin_user=user).order_by('-id')
         search = request.query_params.get('search','')
         category_list=[]
         paginator = ListPagination()
@@ -44,7 +49,8 @@ class CategoryAPI(APIView):
     
     def post(self,request):
         data = request.data
-        serializer = CategorySerializer(data=data)
+        
+        serializer = CategorySerializer(data=data,context={'request': request})
         if serializer.is_valid():
             serializer.save()
             
@@ -53,9 +59,11 @@ class CategoryAPI(APIView):
              return Response({'status':False,'errors':serializer.errors})
         
     def patch(self,request,id):
+    
+
         try:
-            category = CategoryModel.objects.get(id=id)
-            serializer = CategorySerializer(category,data=request.data,partial=True)
+            category = CategoryModel.objects.get(id=id,admin_user=request.user)
+            serializer = CategorySerializer(category,data=request.data,partial=True,context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return Response({'status':True,'data':serializer.data,'message':'Category successfully updated'})
@@ -65,8 +73,10 @@ class CategoryAPI(APIView):
             return Response({'status':False,'message':'Category not available'},status=status.HTTP_400_BAD_REQUEST)
         
     def delete(self,request,id):
+        user = request.user
+
         try :
-            category = CategoryModel.objects.get(id=id)
+            category = CategoryModel.objects.get(id=id,admin_user=user)
             category.delete()
             return Response({'status':True,'message':'Category successfully deleted'})
         except CategoryModel.DoesNotExist:
@@ -76,13 +86,14 @@ class CategoryAPI(APIView):
             
 class SubCategoryAPI(APIView):
     def get(self,request,id=None):
-        sub_categories = CategoryModel.objects.filter(is_active=True).order_by('-id')
+        user = request.user
+        sub_categories = CategoryModel.objects.filter(is_active=True,admin_user=user).order_by('-id')
         search = request.query_params.get("search","")
         main_category = request.query_params.get('category','')
         all_flag = request.query_params.get("all", "false").lower() == "true" 
         sub_categories_list=[]
         if id :
-            parent_category= CategoryModel.objects.get(id=id)
+            parent_category= CategoryModel.objects.get(id=id,admin_user=user)
             sub_categories = parent_category.get_children()
             for sub_category in sub_categories:
                 serializer  = SubCategorySerializer(sub_category).data
@@ -117,7 +128,9 @@ class SubCategoryAPI(APIView):
     
     def post(self,request):
         data = request.data
-        serializer = SubCategorySerializer(data=data)
+        
+        serializer = SubCategorySerializer(data=data,context={'request': request})
+
         if serializer.is_valid():
             serializer.save()
             return Response({'status':True,'data':serializer.data,'message':'Sub Category successfully added'})
@@ -127,8 +140,8 @@ class SubCategoryAPI(APIView):
     def patch(self,request,id):
         try:
               
-           sub_category = CategoryModel.objects.get(id=id)
-           serializer = SubCategorySerializer(sub_category,data=request.data,partial=True)
+           sub_category = CategoryModel.objects.get(id=id,admin_user=request.user)
+           serializer = SubCategorySerializer(sub_category,data=request.data,partial=True,context={'request': request})
            if serializer.is_valid():
                serializer.save()
                return Response({'status':True,'data':serializer.data,'message':'Sub Category successfully updated'})
@@ -141,7 +154,7 @@ class SubCategoryAPI(APIView):
         
     def delete(self,request,id):
         try :
-            sub_category = CategoryModel.objects.get(id=id)
+            sub_category = CategoryModel.objects.get(id=id,admin_user=request.user)
             sub_category.delete()
             return Response({'status':True,'message':'Category successfully deleted'})
         except CategoryModel.DoesNotExist:
@@ -149,12 +162,14 @@ class SubCategoryAPI(APIView):
 
 
 class Export_categories_excel(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return Response(
-                {"status": False, "message": "Authentication credentials were not provided."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+        user = request.user
+        # if not request.user.is_authenticated:
+        #     return Response(
+        #         {"status": False, "message": "Authentication credentials were not provided."},
+        #         status=status.HTTP_401_UNAUTHORIZED,
+        #     )
 
 
         export_dir = os.path.join(settings.MEDIA_ROOT, "export", "categories")
@@ -167,7 +182,7 @@ class Export_categories_excel(APIView):
 
         headers = ["ID", "Name", "Is Active"]
 
-        qs = CategoryModel.objects.all()
+        qs = CategoryModel.objects.filter(admin_user=user)
 
 
         wb = openpyxl.Workbook()
@@ -202,10 +217,13 @@ class Export_categories_excel(APIView):
         }, status=200)
 
 class Export_sub_categories_excel(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self,request):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         sheet.title = "Sub Categories"
+        
+        user = request.user
 
         export_dir = os.path.join(settings.MEDIA_ROOT, "export", "sub categories")
         os.makedirs(export_dir, exist_ok=True)
@@ -218,8 +236,10 @@ class Export_sub_categories_excel(APIView):
         for cell in sheet[1]:  # first row
             cell.font = Font(bold=True)
 
+        qs = CategoryModel.objects.filter(admin_user=user)
+
         # data rows
-        for category in CategoryModel.objects.all():
+        for category in qs:
             if category.get_parent():
                 sheet.append([
                 category.id,
@@ -244,7 +264,8 @@ class Export_sub_categories_excel(APIView):
     
 class HomeCategoryView(APIView):
     def get(self,request):
-        home_categories = HomeCategoryModel.objects.all()
+        user = request.user
+        home_categories = HomeCategoryModel.objects.filter(admin_user=user)
         data = []
         for cat in home_categories:
             data.append({

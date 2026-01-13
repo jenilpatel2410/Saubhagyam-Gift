@@ -7,31 +7,43 @@ class VendorListSerializer(serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField(read_only=True)
     last_name = serializers.SerializerMethodField(read_only=True)
     many_address = serializers.SerializerMethodField(read_only=True)
-    email = serializers.EmailField(source='user.email',default='')
+    email = serializers.EmailField()  #source='email', default=''
 
-    def get_many_address(self,obj):
+    def get_many_address(self, obj):
         if obj.many_address.exists():
-            address = []
-            for addr in obj.many_address.all():
-               address.append(AddressSerializerForCreate(addr).data)
-            return address
+            return AddressSerializerForCreate(
+                obj.many_address.all(),
+                many=True
+            ).data
         return []
-    
+
     def get_first_name(self, obj):
         if obj.name:
-            parts = obj.name.strip().split(" ", 1)
-            return parts[0] if parts else ""
+            return obj.name.split(" ", 1)[0]
         return ""
 
     def get_last_name(self, obj):
-        if obj.name:
-            parts = obj.name.strip().split(" ", 1)
-            return parts[1] if len(parts) > 1 else ""
+        if obj.name and " " in obj.name:
+            return obj.name.split(" ", 1)[1]
         return ""
 
     class Meta:
         model = ContactModel
-        fields = ['id','name','first_name','last_name','user','phone_no','contact_role','many_address','contact_type','email','gstin','pan_number']
+        fields = [
+            'id',
+            'name',
+            'first_name',
+            'last_name',
+            'user',
+            'phone_no',
+            'contact_role',
+            'many_address',
+            'contact_type',
+            'email',
+            'gstin',
+            'pan_number'
+        ]
+
 
 class VendorSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(write_only=True)
@@ -53,72 +65,82 @@ class VendorSerializer(serializers.ModelSerializer):
         return ""
 
     def create(self, validated_data):
-        email = validated_data.pop('email')
+        request = self.context.get('request')
+
+        # ---- Extract contact-level info ----
         first_name = validated_data.pop('first_name')
         last_name = validated_data.pop('last_name')
-        address_data = validated_data.pop('many_address','')
+        email = validated_data.pop('email')
+        address_data = validated_data.pop('many_address', [])
 
-
-        user = UserModel.objects.filter(email = email).first()
+        # ---- Link or create UserModel for identity ----
+        user = UserModel.objects.filter(email=email).first()
         if not user:
-            user = UserModel.objects.create(email=email,first_name=first_name,last_name=last_name)
-            
-        profile = ProfileModel.objects.filter(user = user).first()
-        if not profile:
-            profile = ProfileModel.objects.create(user = user)
+            user = UserModel.objects.create(
+                email=email,
+                first_name=first_name,
+                last_name=last_name
+            )
+        
+        # Ensure Profile exists
+        ProfileModel.objects.get_or_create(user=user)
 
+        # ---- Prepare contact-level fields ----
         validated_data['user'] = user
-        validated_data['name'] = f'{user.first_name} {user.last_name}'
+        validated_data['admin_user'] = request.user
+        validated_data['name'] = f'{first_name} {last_name}'
+        validated_data['email'] = email  # contact-level email
 
-        validated_data['email'] = user.email
-        
-        instance = super().create(validated_data)
+        # ---- Create Contact ----
+        contact = super().create(validated_data)
 
-        if address_data:
-            for addr in address_data:
-               address = AddressModel.objects.create(**addr,full_name=f"{first_name} {last_name}",mobile=user.mobile_no)
-               instance.many_address.add(address)
-               instance.save()
-        
-        instance.refresh_from_db()
+        # ---- Add addresses if any ----
+        for addr in address_data:
+            address = AddressModel.objects.create(
+                **addr,
+                full_name=f'{first_name} {last_name}',
+                mobile=user.mobile_no
+            )
+            contact.many_address.add(address)
 
-        return instance
+        contact.refresh_from_db()
+        return contact
     
-    def update(self,instance,validated_data):
-        user = instance.user
-        user_first_name = validated_data.pop('first_name', None)
-        user_last_name = validated_data.pop('last_name', None)
-        user_email = validated_data.pop('email', None)
+    def update(self, instance, validated_data):
+        first_name = validated_data.pop('first_name', None)
+        last_name = validated_data.pop('last_name', None)
+        email = validated_data.pop('email', None)
         address_data = validated_data.pop('many_address', None)
 
-        if user_first_name:
-            user.first_name = user_first_name
-        if user_last_name:
-            user.last_name = user_last_name
-        if user_email:
-            user.email = user_email
-        user.save()
+        # ---- CONTACT-LEVEL UPDATES ----
+        if first_name or last_name:
+            fname = first_name or instance.name.split(" ", 1)[0]
+            lname = last_name or (
+                instance.name.split(" ", 1)[1]
+                if " " in instance.name else ""
+            )
+            instance.name = f"{fname} {lname}".strip()
 
-        if instance.name != f'{user.first_name} {user.last_name}':
-            instance.name = f'{user.first_name} {user.last_name}'
+        if email:
+            instance.email = email
 
+        # ---- ADDRESS HANDLING (SAFE) ----
         if address_data:
             for addr in address_data:
-                addr_id = addr.get('id','')
+                addr_id = addr.get('id')
                 if addr_id:
                     try:
-                        address=instance.many_address.get(id=addr_id)
+                        address = instance.many_address.get(id=addr_id)
                         for key, value in addr.items():
-                            if key != "id":  # skip the id field
-                              setattr(address, key, value)
+                            if key != "id":
+                                setattr(address, key, value)
                         address.save()
                     except AddressModel.DoesNotExist:
-                        raise serializers.ValidationError({"address": f"Address with id {addr_id} not found"})
-                # else:
-                #     address = AddressModel.objects.create(**addr,full_name=f'{user.first_name} {user.last_name}',mobile=instance.phone_no)
-                #     instance.many_address.add(address)
+                        raise serializers.ValidationError(
+                            {"address": f"Address with id {addr_id} not found"}
+                        )
 
-        instance = super().update(instance,validated_data)
+        instance = super().update(instance, validated_data)
         instance.refresh_from_db()
         return instance
 

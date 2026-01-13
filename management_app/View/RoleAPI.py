@@ -12,11 +12,12 @@ import openpyxl
 from django.http import HttpResponse
 from openpyxl.styles import Font
 from ..pagination import ListPagination
-
+from rest_framework.permissions import IsAuthenticated
 class RoleAPI(APIView):
-
+    
+    permission_classes =[IsAuthenticated]
     def get(self,request):
-        roles = RoleModel.objects.all().order_by('-id')
+        roles = RoleModel.objects.filter(admin_user=request.user).order_by('-id')
         search = request.query_params.get('search','')
         if search:
             roles = RoleModel.objects.filter(Q(name__icontains=search)
@@ -28,7 +29,8 @@ class RoleAPI(APIView):
     
     def post(self,request):
         data=request.data
-        serializer = RoleSerilaizer(data=data)  
+        serializer = RoleSerilaizer(data=data,
+                                context={"request": request})  
         if serializer.is_valid():
             serializer.save()
             return Response({'status':True,'data':serializer.data,'message':'Role Successfully added'})
@@ -36,7 +38,7 @@ class RoleAPI(APIView):
     
     def patch(self,request,id):
         try:
-            role = RoleModel.objects.get(id=id)
+            role = RoleModel.objects.get(id=id,admin_user=request.user)
             serializer = RoleSerilaizer(role,data=request.data,partial=True)
             if serializer.is_valid():
                 serializer.save()
@@ -48,7 +50,7 @@ class RoleAPI(APIView):
 
     def delete(self,request,id):
         try :
-            role = RoleModel.objects.get(id=id)
+            role = RoleModel.objects.get(id=id,admin_user=request.user)
             role.delete()
             return Response({'status':True,'message':'Role successfully deleted'})
         except RoleModel.DoesNotExist:
@@ -56,6 +58,7 @@ class RoleAPI(APIView):
         
 
 class Export_role_excel(APIView):
+    permission_classes =[IsAuthenticated]
     def get(self,request):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
@@ -73,7 +76,7 @@ class Export_role_excel(APIView):
             cell.font = Font(bold=True)
 
         # data rows
-        for role in RoleModel.objects.all():
+        for role in RoleModel.objects.filter(admin_user=request.user):
             sheet.append([role.id, role.name,role.type])
 
         workbook.save(file_path)        

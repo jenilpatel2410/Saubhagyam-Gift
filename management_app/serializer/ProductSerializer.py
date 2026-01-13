@@ -146,11 +146,14 @@ class ProductSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context.get('request')
         images = request.FILES.getlist('images')
-
+        user = request.user
+        
         categories = self._normalize_ids(validated_data.pop('category', []))
         subcategories = self._normalize_ids(validated_data.pop('sub_category', []))
         home_categories = self._normalize_ids(validated_data.pop('home_category',[]))
         
+        validated_data['admin_user'] = user
+
         if isinstance(categories, str):
             categories = json.loads(categories)   
         elif isinstance(categories,int):
@@ -180,8 +183,17 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         request = self.context.get('request')
+        
+        instance.admin_user = request.user
+        
         images = request.FILES.getlist('images')
-        remove_image_ids = request.data.getlist('remove_image_ids', [])
+        # remove_image_ids = request.data.getlist('remove_image_ids', [])
+        remove_image_ids = request.data.get('remove_image_ids', [])
+        if isinstance(remove_image_ids, str):
+            remove_image_ids = [id.strip() for id in remove_image_ids.split(',') if id.strip()]
+        elif not isinstance(remove_image_ids, list):
+            remove_image_ids = []
+
         remove_document = request.data.get('remove_document','')
 
         categories = self._normalize_ids(validated_data.pop('category', None))

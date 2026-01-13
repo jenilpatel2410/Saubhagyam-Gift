@@ -13,6 +13,7 @@ import openpyxl
 from openpyxl.styles import Font
 from django.http import HttpResponse
 from management_app.pagination import ListPagination
+from rest_framework.permissions import IsAuthenticated 
 
 
 class AdminView(APIView):
@@ -54,10 +55,10 @@ class AdminView(APIView):
 
 
 class UserView(APIView):
-
+    permission_classes =[IsAuthenticated]
     def get(self,request,id=None):
         try:
-            users = ContactModel.objects.all().annotate(full_name=Concat('user__first_name', Value(' '), 'user__last_name')).exclude(user__role__type='Admin').order_by('-id')
+            users = ContactModel.objects.filter(admin_user=request.user).annotate(full_name=Concat('user__first_name', Value(' '), 'user__last_name')).exclude(user__role__type='Admin').order_by('-id')
             search = request.query_params.get('search','')
             user_type = request.query_params.get('type','')
             filter = request.query_params.get('filter','')
@@ -96,10 +97,10 @@ class UserView(APIView):
     def post(self,request):
         try:
             data = request.data
-            mobile_no = request.data.get('mobile_no')
-            if ProfileModel.objects.filter(mobile_no=mobile_no).exists():
-                return Response({'status': False, 'message': 'Mobile number already exists'}, status=status.HTTP_400_BAD_REQUEST)
-            serializer = UserSerializer(data=data)
+            # mobile_no = request.data.get('mobile_no')
+            # if ProfileModel.objects.filter(mobile_no=mobile_no).exists():
+            #     return Response({'status': False, 'message': 'Mobile number already exists'}, status=status.HTTP_400_BAD_REQUEST)
+            serializer = UserSerializer(data=data,context={'admin_user': request.user,'request': request})
             
             if not serializer.is_valid():
                 errors = []
@@ -116,33 +117,39 @@ class UserView(APIView):
                 'status':False, 'message':str(e)
             }, status = status.HTTP_400_BAD_REQUEST)
     
-    def patch(self,request,id):
-        
+    def patch(self, request, id):
         try:
-            contact = ContactModel.objects.get(id=id)
-            user = contact.user
-            serializer = UserSerializer(user,data=request.data,partial=True)
-            
-            if not serializer.is_valid():
-                errors = []
-                for field, msgs in serializer.errors.items():
-                    for msg in msgs:
-                        errors.append(f"• {msg.title()}\n")
-                return Response({'status':False,'message':errors}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                serializer.save()
-                return Response({'status':True,'data':serializer.data,'message':'User Successfully updated'}, status=status.HTTP_200_OK)
-            
-        except ContactModel.DoesNotExist:
-            return Response({'status':False,'message':'User does not exist'}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+            contact = ContactModel.objects.get(
+                id=id,
+                admin_user=request.user
+            )
+
+            serializer = ContactUpdateSerializer(
+                contact,
+                data=request.data,
+                partial=True,
+                context={'request': request}
+            )
+
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
             return Response({
-                'status':False, 'message':str(e)
-            }, status = status.HTTP_400_BAD_REQUEST)
+                'status': True,
+                'data': serializer.data,
+                'message': 'Contact successfully updated'
+            }, status=status.HTTP_200_OK)
+
+        except ContactModel.DoesNotExist:
+            return Response({
+                'status': False,
+                'message': 'Contact does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+
     
     def delete(self,request,id):
          try:
-            contact = ContactModel.objects.get(id=id)
+            contact = ContactModel.objects.get(id=id,admin_user=request.user)
             user = contact.user
             user.delete()
             return Response({'status':True,'message':'User Successfully deleted'}, status=status.HTTP_200_OK)
@@ -165,7 +172,7 @@ class UserExportView(APIView):
         file_path = os.path.join(export_dir, file_name)
 
         
-        users = ContactModel.objects.all()
+        users = ContactModel.objects.filter(admin_user=request.user)
 
         if user_type == 'clients':
             users = users.filter(user__role__type__in=['Retailer','Wholesaler'])

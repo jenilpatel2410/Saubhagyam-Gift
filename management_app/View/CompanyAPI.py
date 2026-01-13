@@ -12,17 +12,18 @@ import openpyxl
 from openpyxl.styles import Font
 from django.http import HttpResponse
 from ..pagination import ListPagination
-
+from rest_framework.permissions import IsAuthenticated
 
 class ComapanyView(APIView):
-    
+    permission_classes =[IsAuthenticated]
     def get(self,request):
-        company = CompanyModel.objects.all()
+        company = CompanyModel.objects.filter(admin_user=request.user)
+        
         search = request.query_params.get('search','')
         if search:
             company = CompanyModel.objects.filter(Q(name__icontains=search) |
                                                   Q(code__icontains=search) |
-                                                  Q(address__iontains=search) |
+                                                  Q(address__icontains=search) |
                                                   Q(email__icontains=search) |
                                                   Q(gstin__icontains=search) |
                                                   Q(pan_number__icontains=search) 
@@ -33,7 +34,8 @@ class ComapanyView(APIView):
         return paginator.get_paginated_response(serializer.data)
     
     def post(self,request):
-        serializer = CompanySerializer(data=request.data)
+        serializer = CompanySerializer(data=request.data,
+                                    context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response({'status':True,'data':serializer.data,'message':'Company saved Successfully'})
@@ -42,8 +44,11 @@ class ComapanyView(APIView):
     
     def patch(self,request,id):
         try:
-            company = CompanyModel.objects.get(id=id)
-            serializer = CompanySerializer(company,data=request.data,partial=True)
+            company = CompanyModel.objects.get(id=id,
+                                            admin_user=request.user)
+            serializer = CompanySerializer(company,data=request.data,
+                                           partial=True,
+                                           context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return Response({'status':True,'data':serializer.data,'message':'Company Successfully updated'})
@@ -54,7 +59,7 @@ class ComapanyView(APIView):
 
     def delete(self,request,id):
         try:
-            company = CompanyModel.objects.get(id=id)
+            company = CompanyModel.objects.get(id=id,admin_user=request.user)
             company.delete()
             return Response({'status':True,'message':'Company Successfully deleted'})
 
@@ -62,6 +67,7 @@ class ComapanyView(APIView):
            return Response({'status':False,'message':'Company not available'},status=status.HTTP_400_BAD_REQUEST)
         
 class Export_companies_excel(APIView):
+    permission_classes =[IsAuthenticated]
     def get(self,request):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
@@ -79,7 +85,7 @@ class Export_companies_excel(APIView):
             cell.font = Font(bold=True)
 
         # data rows
-        for companies in CompanyModel.objects.all():
+        for companies in CompanyModel.objects.filter(admin_user=request.user):
             sheet.append([companies.id, companies.name,companies.code])
 
         workbook.save(file_path)

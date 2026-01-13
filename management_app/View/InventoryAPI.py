@@ -16,14 +16,14 @@ from io import BytesIO
 from datetime import datetime
 from django.conf import settings
 from django.utils.timezone import localtime
-
+from rest_framework.permissions import IsAuthenticated
 
 
 class InventoryView(APIView):
-
+    permission_classes = [IsAuthenticated]
     def get(self, request, id=None):
         if id:
-            inventories = Inventory.objects.filter(id=id)
+            inventories = Inventory.objects.filter(id=id,admin_user= request.user)
             if not inventories.exists():
                 return Response({
                     'status': False,
@@ -39,7 +39,7 @@ class InventoryView(APIView):
             }, status = status.HTTP_200_OK)
 
         else:
-            inventories = Inventory.objects.all().order_by('-id')
+            inventories = Inventory.objects.filter(admin_user=request.user).order_by('-id')
 
             # Search filter
             search = request.query_params.get('search', '')
@@ -72,7 +72,7 @@ class InventoryView(APIView):
             }, status = status.HTTP_200_OK)     
     
     def post(self,request):
-        serializer = InventorySerializer(data=request.data)
+        serializer = InventorySerializer(data=request.data,context={"request": request})
         if serializer.is_valid():
             serializer.save()
             return Response({'status':True,'data':serializer.data,'message':'Inventory Product Successfully added'})
@@ -80,8 +80,8 @@ class InventoryView(APIView):
     
     def patch(self,request,id):
         try:
-           inventory = Inventory.objects.get(id=id)
-           serializer = InventorySerializer(inventory,data=request.data,partial=True)
+           inventory = Inventory.objects.get(id=id,admin_user=request.user)
+           serializer = InventorySerializer(inventory,data=request.data,partial=True,context={"request": request})
            if serializer.is_valid():
                serializer.save()
                return Response({'status':True,'data':serializer.data,'message':'Inventory Updated Successfully'})
@@ -91,7 +91,7 @@ class InventoryView(APIView):
         
     def delete(self,request,id):
         try:
-            inventory = Inventory.objects.get(id=id)
+            inventory = Inventory.objects.get(id=id,admin_user=request.user)
             inventory.delete()
             return Response({'status':True,'message':'Inventory Successfully deleted'})
         except Inventory.DoesNotExist:
@@ -99,6 +99,7 @@ class InventoryView(APIView):
     
 class InventoryExcelView(APIView):
 
+    permission_classes = [IsAuthenticated]
     def get(self,request):
         workbook = openpyxl.Workbook()
         sheet = workbook.active
@@ -116,7 +117,7 @@ class InventoryExcelView(APIView):
             cell.font = Font(bold=True)
 
         # data rows
-        for invetories in Inventory.objects.all():
+        for invetories in Inventory.objects.filter(admin_user=request.user):
             sheet.append([invetories.id, invetories.product.name,invetories.quantity,localtime(invetories.created_at).strftime("%Y-%m-%d, %H:%M:%S") or '',localtime(invetories.last_updated).strftime("%Y-%m-%d, %H:%M:%S") or ''])
 
         workbook.save(file_path)
@@ -133,8 +134,9 @@ class InventoryExcelView(APIView):
         
         
 class InventoryReportView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self,request):
-        stocks = Inventory.objects.select_related('product','serialno').all()
+        stocks = Inventory.objects.select_related('product','serialno').filter(admin_user=request.user)
        
         search = request.query_params.get('search','')
         if search:

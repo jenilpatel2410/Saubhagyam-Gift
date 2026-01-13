@@ -7,6 +7,7 @@ from user_app.models import *
 from django.utils.text import slugify
 from rest_framework.views import APIView
 from django.db.models import Q
+from django.db import transaction
 from django.conf import settings
 import csv
 import openpyxl
@@ -25,9 +26,10 @@ from management_app.signals import generate_sequence_id
 
 
 class OrderView(APIView):
+    permission_classes = [IsAuthenticated]  
 
     def get(self, request):
-        orders = OrderModel.objects.all().order_by('order_type', '-id')
+        orders = OrderModel.objects.filter(admin_user=request.user).order_by('order_type', '-id')
 
         search = request.query_params.get('search', '')
         user_type = request.query_params.get('type', '')
@@ -78,11 +80,11 @@ class OrderView(APIView):
     
 
 class OrderDetailsView(APIView):
-
+    permission_classes = [IsAuthenticated]
     def get(self,request,id=None):
         if id:
             try:
-                order = OrderModel.objects.get(id=id)
+                order = OrderModel.objects.get(id=id, admin_user=request.user)
                 order_lines = order.orderrelation.all().select_related('product','order')
                 
                 customer_instance = ContactModel.objects.filter(user=order.customer).first()
@@ -226,7 +228,7 @@ class OrderDetailsView(APIView):
 
 
 class Order_Pdf_View(APIView):
-
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         order_id = request.data.get('order_id', '')
         comp_id = request.data.get('company_id', '')
@@ -235,7 +237,7 @@ class Order_Pdf_View(APIView):
             return Response({'status': False, 'message': 'Order ID not provided'}, status=400)
 
         try:
-            order = OrderModel.objects.get(id=order_id)
+            order = OrderModel.objects.get(id=order_id, admin_user=request.user)
 
             # --- Order Details ---
             final_total_words = num2words(order.final_total or 0, to='cardinal', lang='en').title() + " Only"
@@ -338,6 +340,7 @@ class Order_Pdf_View(APIView):
             # return build_pdf(data)
 
 class Export_orders_excel(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self,request):
         user_type = request.query_params.get('type','')
         workbook = openpyxl.Workbook()
@@ -353,7 +356,7 @@ class Export_orders_excel(APIView):
             file_name = f"orders{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         file_path = os.path.join(export_dir, file_name)
 
-        orders = OrderModel.objects.all()
+        orders = OrderModel.objects.filter(admin_user=request.user)
 
         if user_type:
             user_type = user_type.title()
@@ -385,7 +388,7 @@ class Export_orders_excel(APIView):
         
 class OrderCreateAPI(APIView):
     permission_classes = [IsAuthenticated]
-
+    @transaction.atomic
     def post(self, request):
         user = request.user
         user_id = user.id
@@ -503,6 +506,7 @@ class OrderCreateAPI(APIView):
             shipping_addr = request.data.get("shipping_address", "")
 
         order = OrderModel.objects.create(
+            admin_user=user,
             sales_person=user,
             customer=customer,
             product_info=json.dumps(product_info_list),
@@ -556,6 +560,7 @@ class OrderCreateAPI(APIView):
         })
     
 
+    @transaction.atomic
     def patch(self,request,id):
         customer_id = request.data.get('customer_id','')
 
@@ -563,7 +568,7 @@ class OrderCreateAPI(APIView):
             return Response({'status':False,'message':'Order Id is required'})
         
         try:
-          order = OrderModel.objects.get(id=id)
+          order = OrderModel.objects.get(id=id, admin_user=request.user)
         except OrderModel.DoesNotExist:
             return Response({'status':False,'message':'Order with that id is not available'},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         products_raw = request.data.get("products", [])
