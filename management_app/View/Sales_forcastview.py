@@ -45,7 +45,7 @@ class SalesForecastAPIView(ListAPIView):
             # ---------------------------------------------------
             order_lines = (
                 OrderLinesModel.objects
-                .filter(order__sale_status='Sales Order')
+                .filter(order__sale_status='Sales Order', order__admin_user=request.user)
                 .annotate(line_total=F('quantity') * F('selling_price'))
                 .values('order__order_date', 'product__name')
                 .annotate(
