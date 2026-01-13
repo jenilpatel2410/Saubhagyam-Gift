@@ -149,9 +149,9 @@ PHONENUMBER_DEFAULT_REGION = None
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'saubhagyamgift',
-        'USER': 'postgres',
-        'PASSWORD': '1',
+        'NAME': 'saubhagyam_gift',
+        'USER': 'saubhagyam_gift',
+        'PASSWORD': 'strongpassword',
         'HOST': 'localhost',   # same VPS
         'PORT': '5432',
     }
