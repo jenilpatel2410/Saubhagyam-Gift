@@ -37,7 +37,7 @@ class GraphView(APIView):
         # Last 7 days including today
         for i in range(7):
             day = today - timezone.timedelta(days=6 - i)   # ensures proper order
-            count = OrderModel.objects.filter(created_at__date=day).count()
+            count = OrderModel.objects.filter(created_at__date=day, admin_user=request.user).count()
             orders[day.strftime('%d %b %Y')] = count
 
         return Response({
